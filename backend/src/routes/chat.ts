@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "crypto";
 import type { BrokerAdapter } from "../lib/brokers/types.js";
-import { getBrokerAdapter, getAnthropicClient } from "../lib/credentials.js";
+import { getBrokerAdapter, getBedrockClient, getLlmConfig } from "../lib/credentials.js";
+import { streamMessage, modelSpecFor } from "../lib/llm/index.js";
 import { BrokerAuthError } from "../lib/brokers/errors.js";
 import { TOOLS, type ToolDefinition, getAllToolDefinitions, getApprovalDescription, createUpdateMemoryTool, createRegisterTriggerTool, createCancelTriggerTool, createListTriggersTool, createPauseTriggerTool, createResumeTriggerTool, createGetTriggerRunsTool, createStrategyTools, createTradeTools, createPortfolioTools } from "../lib/tools.js";
 import type { ClientMessage, ServerMessage } from "../types.js";
@@ -200,22 +201,42 @@ export async function runClaudeLoop(
   let tokenExpired = false;
 
   try {
-    const anthropic = getAnthropicClient();
+    const client = getBedrockClient();
+    const config = getLlmConfig();
+    const reasoningSpec = modelSpecFor(config, "reasoning");
+
+    // Use prompt caching for the (large, stable) system prompt when the model
+    // supports it. Splitting the system block lets Bedrock hit a ~90% input-
+    // token rebate on repeated turns in the same conversation.
+    const systemBlocks: Anthropic.TextBlockParam[] = reasoningSpec.supportsPromptCaching
+      ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+      : [{ type: "text", text: systemPrompt }];
 
     while (true) {
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8096,
-        system: systemPrompt,
-        tools: getAllToolDefinitions(Object.values(localTools), broker ?? undefined),
-        messages: history,
+      const { stream, recordUsage } = streamMessage(client, {
+        config,
+        role: "reasoning",
+        purpose: "chat",
+        params: {
+          max_tokens: 8096,
+          system: systemBlocks,
+          tools: getAllToolDefinitions(Object.values(localTools), broker ?? undefined),
+          messages: history,
+        },
       });
 
-      stream.on("text", (text) => {
+      stream.on("text", (text: string) => {
         send({ type: "text_delta", content: text });
       });
 
-      const finalMessage = await stream.finalMessage();
+      let finalMessage: Anthropic.Message;
+      try {
+        finalMessage = (await stream.finalMessage()) as unknown as Anthropic.Message;
+        await recordUsage(finalMessage);
+      } catch (err) {
+        await recordUsage(null, true, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
 
       const toolUses: Anthropic.ToolUseBlock[] = [];
       for (const block of finalMessage.content) {

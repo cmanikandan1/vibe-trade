@@ -21,8 +21,7 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-const FIELDS: { key: "ANTHROPIC_API_KEY" | "DHAN_ACCESS_TOKEN" | "DHAN_CLIENT_ID"; label: string; placeholder: string }[] = [
-  { key: "ANTHROPIC_API_KEY", label: "Anthropic API Key", placeholder: "sk-ant-..." },
+const BROKER_FIELDS: { key: "DHAN_ACCESS_TOKEN" | "DHAN_CLIENT_ID"; label: string; placeholder: string }[] = [
   { key: "DHAN_ACCESS_TOKEN", label: "Dhan Access Token", placeholder: "Your Dhan access token" },
   { key: "DHAN_CLIENT_ID", label: "Dhan Client ID", placeholder: "Your Dhan client ID" },
 ];
@@ -36,7 +35,7 @@ export function SettingsModal({ onSaved, onSkip }: Props) {
 
   async function handleSave() {
     const patch: Record<string, string> = {};
-    for (const { key } of FIELDS) {
+    for (const { key } of BROKER_FIELDS) {
       if (values[key]?.trim()) patch[key] = values[key].trim();
     }
     if (Object.keys(patch).length === 0) {
@@ -46,7 +45,7 @@ export function SettingsModal({ onSaved, onSkip }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await save(patch);
+      await save(patch as Parameters<typeof save>[0]);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
@@ -58,13 +57,14 @@ export function SettingsModal({ onSaved, onSkip }: Props) {
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold text-white mb-1">Configure API Credentials</h2>
+        <h2 className="text-lg font-semibold text-white mb-1">Connect your broker</h2>
         <p className="text-sm text-gray-400 mb-5">
-          VibeTrade needs your API credentials to connect to Dhan and Claude.
+          VibeTrade uses Amazon Bedrock for Claude — it picks up your local AWS credentials automatically.
+          Enter your broker credentials below to get started.
         </p>
 
         <div className="space-y-4">
-          {FIELDS.map(({ key, label, placeholder }) => (
+          {BROKER_FIELDS.map(({ key, label, placeholder }) => (
             <div key={key}>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm text-gray-300">{label}</label>
@@ -92,6 +92,14 @@ export function SettingsModal({ onSaved, onSkip }: Props) {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-5 p-3 rounded-lg bg-gray-800/60 border border-gray-700/60">
+          <p className="text-xs text-gray-400">
+            <span className="text-gray-200 font-medium">AWS credentials:</span>{" "}
+            Bedrock access uses your local AWS default credential chain. Adjust the region,
+            CRIS geography, and model selection from the Settings tab after setup.
+          </p>
         </div>
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}

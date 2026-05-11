@@ -4,15 +4,16 @@
 
 **Your portfolio. Your strategy. Running itself.**
 
-Vibe Trade is a local AI trading agent powered by Claude. Describe your strategy in plain English — the agent writes the Playbook, builds the automation stack, monitors the market around the clock, and comes to you with a reasoned case before touching your account.
+Vibe Trade is a local AI trading agent powered by Claude on Amazon Bedrock. Describe your strategy in plain English — the agent writes the Playbook, builds the automation stack, monitors the market around the clock, and comes to you with a reasoned case before touching your account.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-4DFF4D?labelColor=111)](LICENSE)
-[![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude-4DFF4D?labelColor=111)](https://anthropic.com)
+[![Powered by Claude on Amazon Bedrock](https://img.shields.io/badge/Claude%20on-Amazon%20Bedrock-4DFF4D?labelColor=111)](https://aws.amazon.com/bedrock/)
 
-
-[Docs](https://vibetrade-ai.github.io/docs) · [How it works](#how-it-works) · [Talk to the founders](https://calendly.com/sahil-revise/30min-meeting)
+[How it works](#how-it-works) · [Quickstart](#quickstart) · [Roadmap](#roadmap)
 
 </div>
+
+> **Fork notice:** This is a fork of the original [vibetrade-ai/vibe-trade](https://github.com/vibetrade-ai/vibe-trade) project. This fork replaces the direct Anthropic API integration with Amazon Bedrock, adds Cross-Region Inference (CRIS), configurable model selection per workload, prompt caching, structured usage logging, and a Bedrock connectivity test. See [ADR 013](ADR/013-bedrock-migration.md) for details.
 
 ---
 
@@ -144,6 +145,21 @@ Every trade is written to an immutable journal with the agent's reasoning at the
 
 ---
 
+## Claude on Amazon Bedrock
+
+All model calls go through Amazon Bedrock. No direct Anthropic API keys.
+
+- **Default credential chain.** AWS credentials are picked up from env vars, `~/.aws/credentials`, SSO, or your IAM role. Nothing hardcoded.
+- **Cross-Region Inference (CRIS).** Pick a geography (US / EU / APAC) and Bedrock routes each call to the healthiest region within it.
+- **Two configurable models per workload:**
+  - *Reasoning model* — chat and reasoning jobs. Default: Claude Sonnet 4.5.
+  - *Evaluation model* — LLM trigger conditions and sentiment checks. Default: Claude Haiku 4.5.
+- **Prompt caching** on the large, stable system prompts — typically halves the input-token bill on multi-turn reasoning jobs.
+- **Structured usage logging.** Every call records model, region, latency, input/output tokens, and prompt-cache hits to `~/.vibetrade/llm-usage.jsonl`. Aggregated totals are visible in the Settings tab.
+- **"Test Bedrock access" button.** One click validates both configured models end-to-end — catches misconfigured IAM, missing model access, or wrong region before market hours.
+
+---
+
 ## How it works
 
 Vibe Trade is built on six primitives. Each one solves a problem an LLM can't solve on its own.
@@ -163,8 +179,6 @@ Heartbeat → snapshot → Trigger fires → Playbook loaded
 | 06 | **Learnings** | Immutable trade journal — reasoning captured at decision time, not reconstructed after |
 | 07 | **Skills** | Reusable instruction modules per Playbook _(coming soon)_ |
 
-→ [Full documentation](https://vibetrade-ai.github.io/docs)
-
 ---
 
 ## Quickstart
@@ -174,14 +188,26 @@ Heartbeat → snapshot → Trigger fires → Playbook loaded
 | Dependency | |
 |------------|--|
 | Node.js ≥ 20 | Runtime |
-| Anthropic API key | Claude Sonnet for reasoning jobs, Haiku for condition evaluation |
+| AWS account with Amazon Bedrock access | Uses your local AWS default credential chain (env vars, `~/.aws/credentials`, SSO, IAM role). |
+| Bedrock model access | Enable Anthropic Claude Haiku / Sonnet / Opus in your Bedrock console for the target region. |
 | Dhan account | Broker — credentials added at `/settings` |
 
-Vibe Trade is designed to support multiple brokers. We're starting with **Dhan** — more brokers are on the roadmap.
+### Configure LLM access
 
-Add your Anthropic API key and Dhan credentials at `http://localhost:3001/settings` once the server is running.
+From the Settings tab you can pick:
 
-Everything runs on your machine. Your API key, credentials, trade history, and Playbooks never leave your local environment — stored in `~/.vibetrade/`.
+- **AWS region** (default `us-east-1`).
+- **CRIS geography** — US, EU, or APAC.
+- **Reasoning model** — Claude Sonnet 4.5 (default), Haiku, or Opus.
+- **Evaluation model** — Claude Haiku 4.5 (default) or a higher tier.
+
+Click **Test Bedrock access** to verify both models before going live. The **Bedrock usage** panel shows live aggregate consumption (calls, tokens, prompt-cache hits) so you can track cost.
+
+### Configure broker access
+
+Add your Dhan credentials at `http://localhost:3001/settings` once the server is running. Vibe Trade is designed to support multiple brokers — we're starting with **Dhan**, more are on the roadmap.
+
+Everything runs on your machine. Your AWS credentials, broker credentials, trade history, and Playbooks never leave your local environment — stored in `~/.vibetrade/`.
 
 > **Start with chat before automation.** Ask the agent to look at your positions, fetch a quote, explain a stock's technicals. Once you're comfortable with how it reasons and what tools it has, give it a Playbook and let it run.
 
@@ -195,6 +221,10 @@ Everything runs on your machine. Your API key, credentials, trade history, and P
 - [x] Permissions — in-chat and autonomous consent
 - [x] Playbooks — persistent strategy documents
 - [x] Learnings — immutable trade journal
+- [x] Amazon Bedrock integration with CRIS, prompt caching, usage logging
+- [ ] Bedrock Guardrails integration
+- [ ] Model fallback (retry on Haiku when Sonnet throttles)
+- [ ] Per-request token budget caps
 - [ ] Skills — reusable markdown files that teach the agent a technique
 - [ ] Async approvals — WhatsApp / Telegram
 - [ ] Additional brokers
@@ -202,17 +232,7 @@ Everything runs on your machine. Your API key, credentials, trade history, and P
 
 ---
 
-## Docs
+## Attribution
 
-**[vibetrade-ai.github.io/docs](https://vibetrade-ai.github.io/docs)**
-
----
-
-## Talk to the founders
-
-Have a strategy in mind? Want to run us through your setup? We're happy to jump on a call.
-
-**[Book a 30-minute call →](https://calendly.com/sahil-revise/30min-meeting)**
-
----
-
+Vibe Trade is a fork of the original project by the vibetrade-ai team:
+**[github.com/vibetrade-ai/vibe-trade](https://github.com/vibetrade-ai/vibe-trade)**. The upstream project is the source of the core architecture — Heartbeat, Triggers, Playbooks, Permissions, Learnings. This fork adds the Amazon Bedrock integration and related operational features listed above.
