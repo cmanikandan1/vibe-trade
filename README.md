@@ -9,7 +9,7 @@ Vibe Trade is a local AI trading agent powered by Claude on Amazon Bedrock. Desc
 [![License: MIT](https://img.shields.io/badge/license-MIT-4DFF4D?labelColor=111)](LICENSE)
 [![Powered by Claude on Amazon Bedrock](https://img.shields.io/badge/Claude%20on-Amazon%20Bedrock-4DFF4D?labelColor=111)](https://aws.amazon.com/bedrock/)
 
-[How it works](#how-it-works) · [Quickstart](#quickstart) · [Roadmap](#roadmap)
+[How it works](#how-it-works) · [Prerequisites](#prerequisites) · [Quickstart](#quickstart) · [Roadmap](#roadmap)
 
 </div>
 
@@ -178,6 +178,97 @@ Heartbeat → snapshot → Trigger fires → Playbook loaded
 | 05 | **Playbooks** | Persistent strategy document — consistent identity, isolated P&L, capital bounds |
 | 06 | **Learnings** | Immutable trade journal — reasoning captured at decision time, not reconstructed after |
 | 07 | **Skills** | Reusable instruction modules per Playbook _(coming soon)_ |
+
+---
+
+## Prerequisites
+
+Before running Vibe Trade, make sure you have the following set up and working on your machine.
+
+### 1. Node.js >= 20
+
+Vibe Trade requires Node.js version 20 or later.
+
+```bash
+# Check your version
+node --version
+# Should print v20.x.x or higher
+```
+
+Install from [nodejs.org](https://nodejs.org/) or use a version manager like `nvm`:
+
+```bash
+nvm install 20
+nvm use 20
+```
+
+### 2. AWS CLI installed and configured
+
+The backend calls Claude models through Amazon Bedrock, which requires valid AWS credentials. Credentials are resolved via the standard AWS credential chain -- you do not hardcode keys in the app.
+
+**Supported credential methods (any one of these):**
+
+| Method | How to set up |
+|--------|---------------|
+| Environment variables | Export `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN` |
+| Shared credentials file | Run `aws configure` to populate `~/.aws/credentials` |
+| AWS SSO | Run `aws sso login --profile your-profile` |
+| IAM instance role | Automatically available on EC2 / ECS / Lambda |
+
+**Verify credentials are working:**
+
+```bash
+aws sts get-caller-identity
+# Should return your Account, UserId, and Arn without errors
+```
+
+If this command fails, Bedrock calls will also fail. Fix your credentials first.
+
+### 3. Amazon Bedrock access enabled
+
+Your AWS account must have Amazon Bedrock enabled in the region you plan to use (default: `us-east-1`).
+
+1. Open the [Amazon Bedrock console](https://console.aws.amazon.com/bedrock/).
+2. Select your target region from the region dropdown.
+3. If prompted, request access to the Bedrock service.
+
+### 4. Bedrock model access for Anthropic Claude
+
+Vibe Trade uses two model slots -- a **reasoning model** (default: Claude Sonnet 4.5) and an **evaluation model** (default: Claude Haiku 4.5). You must explicitly enable access to these models in the Bedrock console.
+
+1. In the [Bedrock console](https://console.aws.amazon.com/bedrock/), go to **Model access** (left sidebar).
+2. Click **Manage model access**.
+3. Enable the following Anthropic models (at minimum):
+   - **Claude Haiku 4.5** (used for trigger evaluation)
+   - **Claude Sonnet 4.5** (used for chat and reasoning jobs)
+   - **Claude Opus 4.1** (optional, for deep analysis)
+4. Wait for the status to show "Access granted" before proceeding.
+
+**Verify model access:**
+
+Once the app is running, click **Test Bedrock access** in the Settings tab. This validates both configured models end-to-end and catches IAM issues, missing model access, or wrong-region problems before market hours.
+
+### 5. Dhan trading account with API credentials
+
+Vibe Trade connects to the [Dhan](https://dhan.co/) broker for live market data and order execution. You need:
+
+- A Dhan trading account (sign up at [dhan.co](https://dhan.co/))
+- An **API access token** and **client ID** from the [Dhan Developer Portal](https://dhanhq.co/docs/v2/)
+
+You can add these credentials in one of two ways:
+
+- **Via the UI:** Navigate to `http://localhost:3001/settings` after starting the server and enter them there.
+- **Via environment variables:** Set `DHAN_ACCESS_TOKEN` and `DHAN_CLIENT_ID` in `backend/.env` (copy from `backend/.env.example`).
+
+### 6. Summary checklist
+
+| # | Prerequisite | Verify with |
+|---|---|---|
+| 1 | Node.js >= 20 | `node --version` |
+| 2 | AWS credentials configured | `aws sts get-caller-identity` |
+| 3 | Bedrock service enabled in target region | Check Bedrock console |
+| 4 | Claude model access granted | "Test Bedrock access" button in Settings |
+| 5 | Dhan API credentials | Log in to Dhan Developer Portal |
 
 ---
 
