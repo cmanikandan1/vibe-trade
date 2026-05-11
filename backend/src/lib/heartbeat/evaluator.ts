@@ -1,6 +1,7 @@
 import vm from "vm";
 import type { Trigger, SystemSnapshot, EventDelta } from "./types.js";
-import { getAnthropicClient } from "../credentials.js";
+import { getBedrockClient, getLlmConfig } from "../credentials.js";
+import { invokeMessage } from "../llm/index.js";
 
 export function evaluateTimeTriggers(triggers: Trigger[]): string[] {
   const now = Date.now();
@@ -80,16 +81,20 @@ export async function evaluateLlmTriggers(snapshot: SystemSnapshot, triggers: Tr
   }));
 
   try {
-    const resp = await getAnthropicClient().messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 256,
-      system: "Return ONLY a JSON array of trigger IDs whose conditions are currently met based on the market snapshot. Return [] if none. No markdown, no explanation.",
-      messages: [
-        {
-          role: "user",
-          content: `Snapshot:\n${JSON.stringify(compactSnapshot)}\n\nTriggers:\n${JSON.stringify(triggerList)}`,
-        },
-      ],
+    const resp = await invokeMessage(getBedrockClient(), {
+      config: getLlmConfig(),
+      role: "evaluation",
+      purpose: "llm_trigger_eval",
+      params: {
+        max_tokens: 256,
+        system: "Return ONLY a JSON array of trigger IDs whose conditions are currently met based on the market snapshot. Return [] if none. No markdown, no explanation.",
+        messages: [
+          {
+            role: "user",
+            content: `Snapshot:\n${JSON.stringify(compactSnapshot)}\n\nTriggers:\n${JSON.stringify(triggerList)}`,
+          },
+        ],
+      },
     });
 
     const raw = resp.content[0]?.type === "text" ? resp.content[0].text.trim() : "[]";

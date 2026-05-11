@@ -5,7 +5,8 @@ import type { TriggerStore, ApprovalStore, TriggerAuditStore, MemoryStore, Strat
 import { computeDeployedCapital } from "../trade-utils.js";
 import type { Trigger, SystemSnapshot, TradeArgs } from "./types.js";
 import { TOOLS } from "../tools.js";
-import { getAnthropicClient } from "../credentials.js";
+import { getBedrockClient, getLlmConfig } from "../credentials.js";
+import { invokeMessage, modelSpecFor } from "../llm/index.js";
 import type { Candle } from "../indicators.js";
 import { computeIndicators } from "../indicators.js";
 
@@ -318,15 +319,32 @@ Analyze the situation and take appropriate action.`;
   let lastSummary = "";
 
   async function runJobLoop(): Promise<void> {
+    const client = getBedrockClient();
+    const config = getLlmConfig();
+    const reasoningSpec = modelSpecFor(config, "reasoning");
+
+    // Prompt-cache the (expensive, stable) system prompt on supported models.
+    // Across 10 iterations of a single reasoning job, this alone typically
+    // halves the input-token bill.
+    const systemBlocks: Anthropic.TextBlockParam[] = reasoningSpec.supportsPromptCaching
+      ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+      : [{ type: "text", text: systemPrompt }];
+
     while (!terminated && turns < 10) {
       turns++;
-      const resp = await getAnthropicClient().messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        system: systemPrompt,
-        tools: allTools,
-        messages: history,
-      }, { timeout: ANTHROPIC_CALL_TIMEOUT_MS });
+      const resp = await invokeMessage(client, {
+        config,
+        role: "reasoning",
+        purpose: "reasoning_job",
+        correlationId: trigger.id,
+        params: {
+          max_tokens: 2048,
+          system: systemBlocks,
+          tools: allTools,
+          messages: history,
+        },
+        timeoutMs: ANTHROPIC_CALL_TIMEOUT_MS,
+      });
 
       const respMsg = resp as Anthropic.Message;
       history.push({ role: "assistant", content: respMsg.content });

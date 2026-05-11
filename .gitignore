@@ -6,3 +6,8 @@ dist/
 
 backend/data/
 frontend/out/
+
+# auto-generated
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
+frontend/package-lock.json

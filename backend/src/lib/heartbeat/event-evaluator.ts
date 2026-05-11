@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Trigger, SystemSnapshot, EventCondition, EventDelta } from "./types.js";
-
-const anthropic = new Anthropic();
+import { getBedrockClient, getLlmConfig } from "../credentials.js";
+import { invokeMessage } from "../llm/index.js";
 
 export async function evaluateEventTriggers(
   snapshot: SystemSnapshot,
@@ -127,16 +126,20 @@ export async function evaluateEventTriggers(
       }));
 
       try {
-        const resp = await anthropic.messages.create({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 256,
-          system: "Return ONLY a JSON array of trigger IDs whose sentiment condition is met by the provided headlines. For sentiment_negative triggers, fire if the watched symbols have negative coverage. For sentiment_positive triggers, fire if the watched symbols have positive coverage. Return [] if none. No markdown, no explanation.",
-          messages: [
-            {
-              role: "user",
-              content: `Headlines by category:\n${JSON.stringify(allHeadlines)}\n\nTriggers:\n${JSON.stringify(triggerList)}`,
-            },
-          ],
+        const resp = await invokeMessage(getBedrockClient(), {
+          config: getLlmConfig(),
+          role: "evaluation",
+          purpose: "sentiment_eval",
+          params: {
+            max_tokens: 256,
+            system: "Return ONLY a JSON array of trigger IDs whose sentiment condition is met by the provided headlines. For sentiment_negative triggers, fire if the watched symbols have negative coverage. For sentiment_positive triggers, fire if the watched symbols have positive coverage. Return [] if none. No markdown, no explanation.",
+            messages: [
+              {
+                role: "user",
+                content: `Headlines by category:\n${JSON.stringify(allHeadlines)}\n\nTriggers:\n${JSON.stringify(triggerList)}`,
+              },
+            ],
+          },
         });
 
         const raw = resp.content[0]?.type === "text" ? resp.content[0].text.trim() : "[]";
